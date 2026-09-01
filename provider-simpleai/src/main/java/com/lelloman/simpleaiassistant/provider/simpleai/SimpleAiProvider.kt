@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
-import android.util.Log
 import com.lelloman.simpleai.ISimpleAI
 import com.lelloman.simpleaiassistant.llm.LlmProvider
 import com.lelloman.simpleaiassistant.model.ChatMessage
@@ -42,7 +41,6 @@ class SimpleAiProvider(
 ) : LlmProvider {
 
     companion object {
-        private const val TAG = "SimpleAiProvider"
         private const val PROTOCOL_VERSION = 2
         private const val PACKAGE = "com.lelloman.simpleai"
         private const val SERVICE_ACTION = "com.lelloman.simpleai.SIMPLE_AI_SERVICE"
@@ -77,13 +75,10 @@ class SimpleAiProvider(
                 config.authTokenProvider()  // Fetch fresh token for each request
             )
 
-            Log.d(TAG, "cloudChat response: $responseJson")
-
             val response = parseCloudChatResponse(responseJson)
             response.forEach { event -> emit(event) }
 
         } catch (e: Exception) {
-            Log.e(TAG, "streamChat failed", e)
             emit(StreamEvent.Error(e.message ?: "Unknown error"))
         }
     }.flowOn(Dispatchers.IO)
@@ -148,7 +143,6 @@ class SimpleAiProvider(
             events.add(StreamEvent.Done)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to parse response: $responseJson", e)
             events.add(StreamEvent.Error("Failed to parse response: ${e.message}"))
         }
 
@@ -233,22 +227,17 @@ class SimpleAiProvider(
                 "en"     // Target language (we don't care about the translation, just detection)
             )
 
-            Log.d(TAG, "detectLanguage response: $responseJson")
-
             val response = json.parseToJsonElement(responseJson).jsonObject
             val status = response["status"]?.jsonPrimitive?.contentOrNull
             if (status == "error") {
-                Log.w(TAG, "detectLanguage: translate returned error")
                 return@withContext null
             }
 
             val data = response["data"]?.jsonObject
             val detectedLang = data?.get("detectedSourceLang")?.jsonPrimitive?.contentOrNull
 
-            Log.d(TAG, "detectLanguage: detected '$detectedLang'")
             detectedLang
         } catch (e: Exception) {
-            Log.e(TAG, "detectLanguage failed", e)
             null
         }
     }

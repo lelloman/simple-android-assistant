@@ -76,7 +76,7 @@ class ChatRepositoryImpl(
         .map { entities -> entities.map { it.toDomain() } }
 
     override suspend fun sendMessage(text: String) {
-        logger.info(TAG, "sendMessage: \"${text.take(100)}${if (text.length > 100) "..." else ""}\"")
+        logger.info(TAG, "Sending user message")
 
         // 1. Save user message
         val userMessage = ChatMessage(
@@ -90,7 +90,7 @@ class ChatRepositoryImpl(
         if (_language.value == null) {
             logger.debug(TAG, "Language not set, detecting...")
             detectAndSetLanguage(text)
-            logger.debug(TAG, "Detected language: ${_language.value}")
+            logger.debug(TAG, "Language detection completed")
         }
 
         // 3. Get response from LLM
@@ -100,7 +100,7 @@ class ChatRepositoryImpl(
         try {
             processLlmResponse(iteration = 0)
         } catch (e: Exception) {
-            logger.error(TAG, "Error processing LLM response", e)
+            logger.error(TAG, "Error processing LLM response")
             throw e
         } finally {
             _isStreaming.value = false
@@ -123,21 +123,10 @@ class ChatRepositoryImpl(
         val systemPrompt = buildModeAwareSystemPrompt()
         val toolSpecs = getCurrentToolSpecs()
 
-        // Log full conversation being sent to LLM
-        logger.info(TAG, "=== SENDING TO LLM ===")
-        logger.info(TAG, "System prompt (${systemPrompt.length} chars):\n$systemPrompt")
-        logger.info(TAG, "Tools available: ${toolSpecs.map { it.name }}")
-        logger.info(TAG, "Messages (${currentMessages.size}):")
-        currentMessages.forEach { msg ->
-            val content = msg.content.take(500) + if (msg.content.length > 500) "..." else ""
-            val toolInfo = when {
-                msg.toolCalls != null -> " [tool_calls: ${msg.toolCalls.map { "${it.name}(${it.input})" }}]"
-                msg.toolName != null -> " [tool_response for: ${msg.toolName}]"
-                else -> ""
-            }
-            logger.info(TAG, "  [${msg.role}]$toolInfo: $content")
-        }
-        logger.info(TAG, "=== END SENDING ===")
+        logger.info(
+            TAG,
+            "Sending LLM request (messages=${currentMessages.size}, tools=${toolSpecs.size})"
+        )
 
         var assistantContent = StringBuilder()
         val toolCalls = mutableListOf<com.lelloman.simpleaiassistant.model.ToolCall>()
@@ -154,8 +143,7 @@ class ChatRepositoryImpl(
                     _streamingText.value = assistantContent.toString()
                 }
                 is StreamEvent.ToolUse -> {
-                    logger.info(TAG, "<<< LLM TOOL CALL: ${event.name}")
-                    logger.info(TAG, "    Input: ${event.input}")
+                    logger.info(TAG, "LLM requested a tool call")
                     toolCalls.add(
                         com.lelloman.simpleaiassistant.model.ToolCall(
                             id = event.id,
@@ -165,7 +153,7 @@ class ChatRepositoryImpl(
                     )
                 }
                 is StreamEvent.Error -> {
-                    logger.error(TAG, "<<< LLM ERROR: ${event.message}")
+                    logger.error(TAG, "LLM returned an error")
                     // Check if this is an auth error
                     if (event.message.contains(AUTH_ERROR_PREFIX)) {
                         authErrorMessage = event.message
@@ -218,16 +206,10 @@ class ChatRepositoryImpl(
             return
         }
 
-        // Log full assistant response
-        logger.info(TAG, "=== LLM RESPONSE ===")
-        logger.info(TAG, "Text (${assistantContent.length} chars): $assistantContent")
-        if (toolCalls.isNotEmpty()) {
-            logger.info(TAG, "Tool calls (${toolCalls.size}):")
-            toolCalls.forEach { tc ->
-                logger.info(TAG, "  - ${tc.name}: ${tc.input}")
-            }
-        }
-        logger.info(TAG, "=== END RESPONSE ===")
+        logger.info(
+            TAG,
+            "LLM response completed (characters=${assistantContent.length}, toolCalls=${toolCalls.size})"
+        )
 
         // 4. Save assistant message
         val assistantMessage = ChatMessage(
@@ -241,8 +223,7 @@ class ChatRepositoryImpl(
         // 5. Execute tool calls if any
         if (toolCalls.isNotEmpty()) {
             for (toolCall in toolCalls) {
-                logger.info(TAG, ">>> EXECUTING TOOL: ${toolCall.name}")
-                logger.info(TAG, "    Input: ${toolCall.input}")
+                logger.info(TAG, "Executing tool call")
 
                 val tool = findTool(toolCall.name)
                 if (tool == null) {
@@ -254,12 +235,7 @@ class ChatRepositoryImpl(
                         error = "Tool not found: ${toolCall.name}"
                     )
 
-                logger.info(TAG, "<<< TOOL RESULT: ${toolCall.name}")
-                logger.info(TAG, "    Success: ${result.success}")
-                logger.info(TAG, "    Data: ${result.data}")
-                if (result.error != null) {
-                    logger.info(TAG, "    Error: ${result.error}")
-                }
+                logger.info(TAG, "Tool call completed (success=${result.success})")
 
                 // Save tool result message
                 val toolResultMessage = ChatMessage(
@@ -287,29 +263,27 @@ class ChatRepositoryImpl(
     }
 
     private suspend fun detectAndSetLanguage(text: String) {
-        logger.debug(TAG, "detectAndSetLanguage: starting detection for text: ${text.take(50)}")
+        logger.debug(TAG, "Starting language detection")
         _isDetectingLanguage.value = true
         try {
             val detectedCode = llmProvider.detectLanguage(text)
-            logger.debug(TAG, "detectAndSetLanguage: LLM returned code: $detectedCode")
             if (detectedCode != null) {
                 val language = Language.fromCode(detectedCode)
-                logger.debug(TAG, "detectAndSetLanguage: mapped to language: $language")
                 _language.value = language
                 languagePreferences.setLanguage(language)
-                logger.info(TAG, "Language detected and set: ${language?.displayName ?: "null"}")
+                logger.info(TAG, "Language preference detected and set")
             } else {
                 logger.warn(TAG, "detectAndSetLanguage: LLM returned null, language not set")
             }
         } catch (e: Exception) {
-            logger.error(TAG, "detectAndSetLanguage: exception during detection", e)
+            logger.error(TAG, "Language detection failed")
         } finally {
             _isDetectingLanguage.value = false
         }
     }
 
     override suspend fun setLanguage(language: Language?) {
-        logger.info(TAG, "setLanguage: ${language?.displayName ?: "null (auto-detect)"}")
+        logger.info(TAG, "Language preference changed")
         _language.value = language
         languagePreferences.setLanguage(language)
     }
@@ -320,11 +294,11 @@ class ChatRepositoryImpl(
     }
 
     override suspend fun restartFromMessage(messageId: String) {
-        logger.info(TAG, "Restarting from message: $messageId")
+        logger.info(TAG, "Restarting conversation from message")
 
         val message = chatMessageDao.getById(messageId)
         if (message == null) {
-            logger.error(TAG, "Message not found: $messageId")
+            logger.error(TAG, "Message selected for restart was not found")
             return
         }
 
@@ -364,7 +338,7 @@ class ChatRepositoryImpl(
     }
 
     private suspend fun handleModeSwitch(fromMode: AssistantMode, toMode: AssistantMode) {
-        logger.info(TAG, "Mode switch: ${fromMode.id} -> ${toMode.id}")
+        logger.info(TAG, "Switching assistant mode")
 
         val currentMessages = chatMessageDao.getAll().map { it.toDomain() }
         if (currentMessages.isEmpty()) {
@@ -387,9 +361,6 @@ class ChatRepositoryImpl(
         _currentMode.value = toMode
 
         logger.info(TAG, "History compacted: ${currentMessages.size} -> ${compacted.keptMessages.size} messages")
-        if (compacted.contextSummary != null) {
-            logger.debug(TAG, "Context summary: ${compacted.contextSummary}")
-        }
     }
 
     /**
