@@ -30,19 +30,27 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
     api(project(":assistant-core"))
 
-    implementation(libs.kotlinx.android.coroutines)
-    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    api(libs.kotlinx.android.coroutines)
+    api(libs.androidx.lifecycle.viewmodel.ktx)
 
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.ui)
-    implementation(libs.androidx.ui.graphics)
+    api(platform(libs.androidx.compose.bom))
+    api(libs.androidx.ui)
+    api(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
-    implementation(libs.androidx.material3)
+    api(libs.androidx.material3)
     implementation(libs.androidx.compose.material.icons)
     debugImplementation(libs.androidx.ui.tooling)
 }
+
+apply(from = rootProject.file("gradle/publish-library.gradle.kts"))

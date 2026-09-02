@@ -31,17 +31,24 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
     api(project(":assistant-core"))
 
-    implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.android.coroutines)
     implementation(libs.kotlinx.serialization.json)
 
-    implementation(platform(libs.okhttp.bom))
-    implementation(libs.okhttp)
+    api(platform(libs.okhttp.bom))
+    api(libs.okhttp)
 
     testImplementation(libs.junit)
 }
+
+apply(from = rootProject.file("gradle/publish-library.gradle.kts"))

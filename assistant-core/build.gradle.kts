@@ -32,15 +32,23 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.kotlinx.android.coroutines)
+    api(libs.androidx.annotation)
+    api(libs.kotlinx.android.coroutines)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.room.runtime)
+    api(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.ksp.compiler)
 
     testImplementation(libs.junit)
 }
+
+apply(from = rootProject.file("gradle/publish-library.gradle.kts"))

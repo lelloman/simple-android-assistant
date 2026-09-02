@@ -34,12 +34,19 @@ android {
     buildFeatures {
         aidl = true
     }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
 dependencies {
     api(project(":assistant-core"))
 
-    implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.android.coroutines)
     implementation(libs.kotlinx.serialization.json)
 }
+
+apply(from = rootProject.file("gradle/publish-library.gradle.kts"))
