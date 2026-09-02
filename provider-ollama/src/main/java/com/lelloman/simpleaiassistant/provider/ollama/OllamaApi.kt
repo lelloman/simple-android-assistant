@@ -22,7 +22,9 @@ data class OllamaChatRequest(
 data class OllamaMessage(
     val role: String,
     val content: String,
-    @SerialName("tool_calls") val toolCalls: List<OllamaToolCall>? = null
+    @SerialName("tool_calls") val toolCalls: List<OllamaToolCall>? = null,
+    @SerialName("tool_name") val toolName: String? = null,
+    @SerialName("tool_call_id") val toolCallId: String? = null
 )
 
 @Serializable
@@ -40,7 +42,8 @@ data class OllamaFunction(
 
 @Serializable
 data class OllamaToolCall(
-    val function: OllamaToolCallFunction
+    val function: OllamaToolCallFunction,
+    val id: String? = null
 )
 
 @Serializable

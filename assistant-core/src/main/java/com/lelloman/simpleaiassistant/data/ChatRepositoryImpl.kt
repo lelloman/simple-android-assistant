@@ -13,6 +13,7 @@ import com.lelloman.simpleaiassistant.model.Language
 import com.lelloman.simpleaiassistant.model.MessageRole
 import com.lelloman.simpleaiassistant.model.StreamEvent
 import com.lelloman.simpleaiassistant.tool.Tool
+import com.lelloman.simpleaiassistant.tool.ToolInputValidator
 import com.lelloman.simpleaiassistant.tool.ToolRegistry
 import com.lelloman.simpleaiassistant.R
 import com.lelloman.simpleaiassistant.util.AssistantLogger
@@ -25,6 +26,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.takeWhile
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 class ChatRepositoryImpl(
@@ -72,10 +76,13 @@ class ChatRepositoryImpl(
     // Context summary from history compaction (prepended to system prompt)
     private var contextSummary: String? = null
 
+    // One conversation is one ordered transcript; sends must never interleave.
+    private val sendMutex = Mutex()
+
     override val messages: Flow<List<ChatMessage>> = chatMessageDao.observeAll()
         .map { entities -> entities.map { it.toDomain() } }
 
-    override suspend fun sendMessage(text: String) {
+    override suspend fun sendMessage(text: String) = sendMutex.withLock {
         logger.info(TAG, "Sending user message")
 
         // 1. Save user message
@@ -130,13 +137,21 @@ class ChatRepositoryImpl(
 
         var assistantContent = StringBuilder()
         val toolCalls = mutableListOf<com.lelloman.simpleaiassistant.model.ToolCall>()
-        var authErrorMessage: String? = null
+        var streamErrorMessage: String? = null
 
         llmProvider.streamChat(
             messages = currentMessages,
             tools = toolSpecs,
             systemPrompt = systemPrompt
-        ).collect { event ->
+        ).takeWhile { event ->
+            if (event is StreamEvent.Error) {
+                logger.error(TAG, "LLM returned an error")
+                streamErrorMessage = event.message
+                false
+            } else {
+                true
+            }
+        }.collect { event ->
             when (event) {
                 is StreamEvent.Text -> {
                     assistantContent.append(event.content)
@@ -152,55 +167,31 @@ class ChatRepositoryImpl(
                         )
                     )
                 }
-                is StreamEvent.Error -> {
-                    logger.error(TAG, "LLM returned an error")
-                    // Check if this is an auth error
-                    if (event.message.contains(AUTH_ERROR_PREFIX)) {
-                        authErrorMessage = event.message
-                    } else {
-                        // Non-auth error, save as message
-                        val errorMessage = ChatMessage(
-                            id = generateId(),
-                            role = MessageRole.ASSISTANT,
-                            content = "Error: ${event.message}"
-                        )
-                        saveMessage(errorMessage)
-                    }
-                    return@collect
-                }
+                is StreamEvent.Error -> Unit // Consumed by takeWhile above.
                 is StreamEvent.Done -> {
                     logger.debug(TAG, "<<< LLM STREAM DONE")
                 }
             }
         }
 
-        // Handle auth error with retry
-        if (!isAuthRetry) {
-            authErrorMessage?.let { message ->
+        // A provider error terminates this response. Retry authentication once;
+        // otherwise persist exactly one error message and no empty response.
+        streamErrorMessage?.let { message ->
+            if (!isAuthRetry && message.contains(AUTH_ERROR_PREFIX)) {
                 logger.info(TAG, "Auth error detected, attempting token refresh and retry")
                 val shouldRetry = authErrorHandler.onAuthError(message)
                 if (shouldRetry) {
                     logger.info(TAG, "Token refreshed, retrying LLM request")
                     processLlmResponse(iteration, isAuthRetry = true)
                     return
-                } else {
-                    logger.warn(TAG, "Auth error handler did not refresh tokens, showing error to user")
-                    val errorMessage = ChatMessage(
-                        id = generateId(),
-                        role = MessageRole.ASSISTANT,
-                        content = "Error: $message"
-                    )
-                    saveMessage(errorMessage)
-                    return
                 }
             }
-        } else if (authErrorMessage != null) {
-            // Already retried once, show error
-            logger.warn(TAG, "Auth error persists after retry, showing error to user")
+
+            logger.warn(TAG, "LLM request failed${if (isAuthRetry) " after authentication retry" else ""}")
             val errorMessage = ChatMessage(
                 id = generateId(),
                 role = MessageRole.ASSISTANT,
-                content = "Error: $authErrorMessage"
+                content = "Error: $message"
             )
             saveMessage(errorMessage)
             return
@@ -225,15 +216,7 @@ class ChatRepositoryImpl(
             for (toolCall in toolCalls) {
                 logger.info(TAG, "Executing tool call")
 
-                val tool = findTool(toolCall.name)
-                if (tool == null) {
-                    logger.error(TAG, "    ERROR: Tool not found!")
-                }
-                val result = tool?.execute(toolCall.input)
-                    ?: com.lelloman.simpleaiassistant.tool.ToolResult(
-                        success = false,
-                        error = "Tool not found: ${toolCall.name}"
-                    )
+                val result = executeToolCall(toolCall)
 
                 logger.info(TAG, "Tool call completed (success=${result.success})")
 
@@ -259,6 +242,40 @@ class ChatRepositoryImpl(
             result.data?.toString() ?: "Success"
         } else {
             "Error: ${result.error ?: "Unknown error"}"
+        }
+    }
+
+    private suspend fun executeToolCall(
+        toolCall: com.lelloman.simpleaiassistant.model.ToolCall
+    ): com.lelloman.simpleaiassistant.tool.ToolResult {
+        if (toolCall.name.isBlank()) {
+            return com.lelloman.simpleaiassistant.tool.ToolResult(
+                success = false,
+                error = "Tool name must not be blank"
+            )
+        }
+
+        val tool = findTool(toolCall.name)
+            ?: return com.lelloman.simpleaiassistant.tool.ToolResult(
+                success = false,
+                error = "Tool not found: ${toolCall.name}"
+            )
+
+        ToolInputValidator.validate(tool.spec, toolCall.input)?.let { validationError ->
+            return com.lelloman.simpleaiassistant.tool.ToolResult(
+                success = false,
+                error = "Invalid input for ${toolCall.name}: $validationError"
+            )
+        }
+
+        return try {
+            tool.execute(toolCall.input)
+        } catch (e: Exception) {
+            logger.error(TAG, "Tool execution failed: ${toolCall.name}", e)
+            com.lelloman.simpleaiassistant.tool.ToolResult(
+                success = false,
+                error = e.message ?: "Tool execution failed"
+            )
         }
     }
 
@@ -452,7 +469,7 @@ class ChatRepositoryImpl(
             return switchModeTool
         }
         // Check registry
-        return toolRegistry.findById(toolName)
+        return toolRegistry.findByName(toolName)
     }
 }
 

@@ -65,6 +65,10 @@ class ToolRegistry(
      */
     fun findById(toolId: String): Tool? = tools[toolId]
 
+    /** Find a tool by the public function name advertised in its specification. */
+    fun findByName(toolName: String): Tool? =
+        tools.values.firstOrNull { it.spec.name == toolName }
+
     /**
      * Get ALL tools (both root-level and those inside groups).
      */

@@ -114,7 +114,7 @@ class OllamaProvider(
                     message.toolCalls?.forEach { toolCall ->
                         emit(
                             StreamEvent.ToolUse(
-                                id = UUID.randomUUID().toString(),
+                                id = toolCall.id ?: UUID.randomUUID().toString(),
                                 name = toolCall.function.name,
                                 input = toolCall.function.arguments.toMap()
                             )
@@ -236,7 +236,7 @@ Language code:"""
         }
     }
 
-    private fun buildMessageList(
+    internal fun buildMessageList(
         messages: List<ChatMessage>,
         systemPrompt: String
     ): List<OllamaMessage> {
@@ -254,7 +254,24 @@ Language code:"""
                 MessageRole.ASSISTANT -> "assistant"
                 MessageRole.TOOL -> "tool"
             }
-            result.add(OllamaMessage(role = role, content = message.content))
+            val toolCalls = message.toolCalls?.map { call ->
+                OllamaToolCall(
+                    function = OllamaToolCallFunction(
+                        name = call.name,
+                        arguments = mapToJsonElement(call.input).jsonObject
+                    ),
+                    id = call.id
+                )
+            }
+            result.add(
+                OllamaMessage(
+                    role = role,
+                    content = message.content,
+                    toolCalls = toolCalls,
+                    toolName = message.toolName,
+                    toolCallId = message.toolCallId
+                )
+            )
         }
 
         return result
