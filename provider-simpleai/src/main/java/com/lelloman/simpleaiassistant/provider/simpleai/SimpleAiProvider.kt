@@ -72,7 +72,7 @@ class SimpleAiProvider(
                 toolsJson,
                 systemPrompt,
                 null, // No stable cache identity is available yet.
-                config.authTokenProvider()  // Fetch fresh token for each request
+                "" // Compatibility slot only: credentials belong to the SimpleAI gateway.
             )
 
             val response = parseCloudChatResponse(responseJson)

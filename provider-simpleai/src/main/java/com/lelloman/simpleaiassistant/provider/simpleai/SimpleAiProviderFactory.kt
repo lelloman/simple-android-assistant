@@ -14,11 +14,11 @@ import com.lelloman.simpleaiassistant.llm.ProviderConfigSchema
  * all backend communication.
  *
  * @param context Application context for binding to SimpleAI service
- * @param authTokenProvider Function that returns the current auth token for cloud AI calls
+ * @param authTokenProvider Legacy compatibility parameter; ignored. Sign in inside SimpleAI.
  */
 class SimpleAiProviderFactory(
     private val context: Context,
-    private val authTokenProvider: () -> String?
+    @Suppress("UNUSED_PARAMETER") authTokenProvider: () -> String? = { null }
 ) : LlmProviderFactory {
 
     companion object {
@@ -36,7 +36,7 @@ class SimpleAiProviderFactory(
     override fun createProvider(config: Map<String, Any?>): LlmProvider {
         return SimpleAiProvider(
             context = context,
-            config = SimpleAiConfig(authTokenProvider = { authTokenProvider() ?: "" })
+            config = SimpleAiConfig()
         )
     }
 
@@ -46,11 +46,6 @@ class SimpleAiProviderFactory(
         // Check if SimpleAI app is installed
         if (!isInstalled()) {
             return "SimpleAI app is not installed"
-        }
-
-        // Check auth token availability
-        if (authTokenProvider() == null) {
-            return "Not logged in. Please log in to use SimpleAI."
         }
 
         return null
