@@ -23,9 +23,9 @@ val publicationGroup = if (isJitPackBuild && jitPackBaseGroup != null && jitPack
 }
 
 val publicationVersion = if (isJitPackBuild) {
-    providers.environmentVariable("VERSION").getOrElse("0.1.0-SNAPSHOT")
+    providers.environmentVariable("VERSION").getOrElse("0.2.0-SNAPSHOT")
 } else {
-    providers.gradleProperty("VERSION_NAME").getOrElse("0.1.0-SNAPSHOT")
+    providers.gradleProperty("VERSION_NAME").getOrElse("0.2.0-SNAPSHOT")
 }
 
 allprojects {

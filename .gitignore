@@ -4,3 +4,13 @@
 build/
 local.properties
 **/build/
+
+/target/
+node_modules/
+**/dist/
+web/core/wasm/
+playwright-report/
+test-results/
+
+/web/*/LICENSE
+/web/*/NOTICE

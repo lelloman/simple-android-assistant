@@ -1,0 +1,28 @@
+{
+  "name": "@lelloman/simple-assistant",
+  "version": "0.2.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "wasm",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lelloman/simple-android-assistant.git",
+    "directory": "web/core"
+  }
+}

@@ -1,0 +1,239 @@
+{
+  "config": {
+    "basePrompt": "BASE",
+    "rootMode": {
+      "id": "root",
+      "name": "Root",
+      "prompt": "ROOT",
+      "toolIds": [],
+      "children": [
+        {
+          "id": "leaf",
+          "name": "Leaf",
+          "prompt": "LEAF",
+          "inheritPrompts": [
+            "root"
+          ],
+          "toolIds": [
+            "read"
+          ]
+        }
+      ]
+    },
+    "tools": [
+      {
+        "name": "read",
+        "description": "Read",
+        "inputSchema": {
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "sessionId": "fixture",
+  "steps": [
+    {
+      "command": {
+        "type": "set_language",
+        "language": "en"
+      },
+      "expected": {
+        "state": {
+          "language": "en"
+        },
+        "effects": []
+      }
+    },
+    {
+      "command": {
+        "type": "switch_mode",
+        "modeId": "leaf"
+      },
+      "expected": {
+        "state": {
+          "modeId": "leaf",
+          "modePath": [
+            "root",
+            "leaf"
+          ]
+        }
+      }
+    },
+    {
+      "command": {
+        "type": "send",
+        "text": "hello",
+        "timestamp": 1
+      },
+      "expected": {
+        "state": {
+          "activity": "chat",
+          "messages": [
+            {
+              "id": "fixture:m1",
+              "role": "user",
+              "content": "hello"
+            }
+          ]
+        },
+        "effects": [
+          {
+            "type": "provider",
+            "requestId": "fixture:r1",
+            "purpose": "chat"
+          }
+        ]
+      }
+    },
+    {
+      "command": {
+        "type": "provider_event",
+        "requestId": "fixture:r1",
+        "event": {
+          "type": "text",
+          "content": "Looking"
+        }
+      },
+      "expected": {
+        "state": {
+          "streamingText": "Looking"
+        }
+      }
+    },
+    {
+      "command": {
+        "type": "provider_event",
+        "requestId": "fixture:r1",
+        "event": {
+          "type": "tool_use",
+          "id": "call",
+          "name": "read",
+          "input": {}
+        }
+      },
+      "expected": {
+        "effects": []
+      }
+    },
+    {
+      "command": {
+        "type": "provider_event",
+        "requestId": "fixture:r1",
+        "event": {
+          "type": "done"
+        }
+      },
+      "expected": {
+        "state": {
+          "activity": "tool"
+        },
+        "effects": [
+          {
+            "type": "tool",
+            "requestId": "fixture:r2",
+            "call": {
+              "id": "call",
+              "name": "read",
+              "input": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "command": {
+        "type": "tool_result",
+        "requestId": "fixture:r2",
+        "result": "found"
+      },
+      "expected": {
+        "effects": [
+          {
+            "type": "provider",
+            "requestId": "fixture:r3"
+          }
+        ]
+      }
+    },
+    {
+      "command": {
+        "type": "provider_event",
+        "requestId": "fixture:r3",
+        "event": {
+          "type": "text",
+          "content": "Finished"
+        }
+      },
+      "expected": {
+        "state": {
+          "streamingText": "Finished"
+        }
+      }
+    },
+    {
+      "command": {
+        "type": "provider_event",
+        "requestId": "fixture:r3",
+        "event": {
+          "type": "done"
+        }
+      },
+      "expected": {
+        "state": {
+          "activity": "idle",
+          "messages": [
+            {
+              "role": "user"
+            },
+            {
+              "role": "assistant"
+            },
+            {
+              "role": "tool",
+              "toolCallId": "call",
+              "content": "found"
+            },
+            {
+              "role": "assistant",
+              "content": "Finished"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "command": {
+        "type": "switch_mode",
+        "modeId": "root"
+      },
+      "expected": {
+        "state": {
+          "modeId": "root"
+        }
+      }
+    },
+    {
+      "command": {
+        "type": "restart",
+        "messageId": "fixture:m1"
+      },
+      "expected": {
+        "state": {
+          "modeId": "leaf",
+          "messages": [
+            {
+              "id": "fixture:m1",
+              "content": "hello"
+            }
+          ]
+        },
+        "effects": [
+          {
+            "type": "provider",
+            "requestId": "fixture:r4"
+          }
+        ]
+      }
+    }
+  ]
+}

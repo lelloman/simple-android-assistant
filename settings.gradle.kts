@@ -20,9 +20,13 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "simple-android-assistant"
+rootProject.name = "simple-assistant"
 
 include(":assistant-core")
 include(":assistant-compose")
 include(":provider-ollama")
 include(":provider-simpleai")
+
+listOf("assistant-core", "assistant-compose", "provider-ollama", "provider-simpleai").forEach {
+    project(":$it").projectDir = file("android/$it")
+}

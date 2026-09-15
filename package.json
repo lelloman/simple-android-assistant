@@ -1,0 +1,29 @@
+{
+  "name": "simple-assistant-workspace",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "web/core",
+    "web/vue",
+    "web/providers"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build": "npm run build:wasm && node scripts/package-licenses.mjs && npm run build --workspaces",
+    "typecheck": "tsc -p web/core && vue-tsc -p web/vue/tsconfig.json --noEmit",
+    "test": "node --test web/core/test/*.test.mjs web/providers/test/*.test.mjs",
+    "test:browser": "playwright test",
+    "pack:all": "node scripts/package-licenses.mjs && npm pack --workspaces --pack-destination target/packages"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "6.4.3",
+    "@vitejs/plugin-vue": "5.2.1",
+    "vue-tsc": "2.2.12",
+    "@playwright/test": "1.57.0"
+  },
+  "dependencies": {
+    "vue": "3.5.13"
+  }
+}

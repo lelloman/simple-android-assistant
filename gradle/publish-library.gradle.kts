@@ -9,9 +9,9 @@ plugins.apply("signing")
 val projectUrl = "https://github.com/lelloman/simple-android-assistant"
 val publicationDescription = when (project.name) {
     "assistant-core" -> "Core conversation, modes, persistence, and tool orchestration APIs."
-    "assistant-compose" -> "Reusable Jetpack Compose UI for Simple Android Assistant."
-    "provider-ollama" -> "Ollama provider for Simple Android Assistant."
-    "provider-simpleai" -> "SimpleAI Android provider for Simple Android Assistant."
+    "assistant-compose" -> "Reusable Jetpack Compose UI for Simple Assistant."
+    "provider-ollama" -> "Ollama provider for Simple Assistant."
+    "provider-simpleai" -> "SimpleAI Android provider for Simple Assistant."
     else -> project.description ?: project.name
 }
 
@@ -46,7 +46,7 @@ afterEvaluate {
         artifactId = project.name
 
         pom {
-            name.set("Simple Android Assistant: ${project.name}")
+            name.set("Simple Assistant: ${project.name}")
             description.set(publicationDescription)
             url.set(projectUrl)
 

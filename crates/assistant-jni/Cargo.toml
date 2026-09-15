@@ -1,0 +1,13 @@
+[package]
+name = "assistant-jni"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "simple_assistant"
+crate-type = ["cdylib"]
+
+[dependencies]
+assistant-engine.workspace = true
+jni = "0.21"
