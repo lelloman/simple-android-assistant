@@ -82,6 +82,8 @@ fun ChatScreen(
     onCancel: () -> Unit = {},
     onConfirmRestart: (String, Long) -> Unit = { _, _ -> },
     onDismissRestart: () -> Unit = {},
+    onReportMessage: ((String) -> Unit)? = null,
+    reportLabel: String = "Report response",
 ) {
     var inputText by remember { mutableStateOf("") }
     var showClearConfirmation by remember { mutableStateOf(false) }
@@ -269,7 +271,9 @@ fun ChatScreen(
                             ChatMessageItem(
                                 message = message,
                                 debugMode = state.debugMode,
-                                onRestartFromHere = onRestartFromMessage
+                                onRestartFromHere = onRestartFromMessage,
+                                onReportMessage = onReportMessage,
+                                reportLabel = reportLabel
                             )
                         }
                     }

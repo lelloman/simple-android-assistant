@@ -43,10 +43,14 @@ fun ChatMessageItem(
     message: ChatMessage,
     debugMode: Boolean,
     modifier: Modifier = Modifier,
-    onRestartFromHere: ((String) -> Unit)? = null
+    onRestartFromHere: ((String) -> Unit)? = null,
+    onReportMessage: ((String) -> Unit)? = null,
+    reportLabel: String = "Report response",
 ) {
     val isUser = message.role == MessageRole.USER
     val isTool = message.role == MessageRole.TOOL
+    val canRestart = isUser && onRestartFromHere != null
+    val canReport = message.role == MessageRole.ASSISTANT && onReportMessage != null
     var showContextMenu by remember { mutableStateOf(false) }
 
     Row(
@@ -62,7 +66,7 @@ fun ChatMessageItem(
                 modifier = Modifier
                     .widthIn(max = 300.dp)
                     .then(
-                        if (isUser && onRestartFromHere != null) {
+                        if (canRestart || canReport) {
                             Modifier.combinedClickable(
                                 onClick = {},
                                 onLongClick = { showContextMenu = true }
@@ -145,25 +149,36 @@ fun ChatMessageItem(
             }
         }
 
-            // Context menu for user messages
-            if (isUser && onRestartFromHere != null) {
+            // Context actions are opt-in and restricted to the applicable message role.
+            if (canRestart || canReport) {
                 DropdownMenu(
                     expanded = showContextMenu,
                     onDismissRequest = { showContextMenu = false }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Restart from here") },
-                        onClick = {
-                            showContextMenu = false
-                            onRestartFromHere(message.id)
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = null
-                            )
-                        }
-                    )
+                    if (canRestart) {
+                        DropdownMenuItem(
+                            text = { Text("Restart from here") },
+                            onClick = {
+                                showContextMenu = false
+                                onRestartFromHere?.invoke(message.id)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
+                    if (canReport) {
+                        DropdownMenuItem(
+                            text = { Text(reportLabel) },
+                            onClick = {
+                                showContextMenu = false
+                                onReportMessage?.invoke(message.id)
+                            },
+                        )
+                    }
                 }
             }
         }
