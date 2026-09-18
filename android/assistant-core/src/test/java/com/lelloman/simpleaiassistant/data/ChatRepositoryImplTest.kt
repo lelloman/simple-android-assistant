@@ -83,4 +83,37 @@ class ChatRepositoryImplTest {
             assertEquals(0, calls)
         } finally { s.close(); scope.cancel() }
     }
+    @Test fun diagnosticsFollowNativeTurnsAndClearRevokesSnapshots() = runBlocking {
+        val storage = object : com.lelloman.simpleaiassistant.diagnostics.DiagnosticStorage {
+            var content: String? = null
+            override fun read(maxBytes: Int) = content
+            override fun write(content: String) { this.content = content }
+            override fun clear() { content = null }
+        }
+        val recorder = com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder(storage)
+        recorder.setAccount("owner", true)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        var round = 0
+        val s = AssistantSession.create(config, Provider { flow {
+            if (round++ == 0) emit(StreamEvent.ToolUse("call", "read", mapOf("password" to "private-value")))
+            else emit(StreamEvent.Text("answer"))
+            emit(StreamEvent.Done)
+        } }, { ToolResult(true, "result") }, scope = scope, diagnostics = recorder)
+        try {
+            s.setLanguage("en")
+            s.send("hello")
+            awaitIdle(s)
+            val responseId = s.state.value.messages.last().id
+            val snapshot = recorder.snapshot(messageId = responseId)!!
+            assertTrue(snapshot.content.contains("completed"))
+            assertTrue(snapshot.content.contains("tool_call"))
+            assertTrue(snapshot.content.contains("tool_result"))
+            assertTrue(snapshot.content.contains("answer"))
+            assertFalse(snapshot.content.contains("private-value"))
+            s.clear()
+            assertNull(recorder.snapshot())
+            assertFalse(recorder.isCurrent(snapshot))
+        } finally { s.close(); scope.cancel() }
+    }
+
 }

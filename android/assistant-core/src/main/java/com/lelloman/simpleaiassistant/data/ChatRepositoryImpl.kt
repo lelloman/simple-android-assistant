@@ -20,6 +20,7 @@ class ChatRepositoryImpl(
     scope: CoroutineScope,
     private val modeManager: ModeManager? = null,
     authErrorHandler: AuthErrorHandler = AuthErrorHandler.NoOp,
+    diagnostics: com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder? = null,
 ) : ChatRepository {
     private val epoch = AtomicLong()
     private val state = MutableStateFlow(AssistantState())
@@ -30,7 +31,7 @@ class ChatRepositoryImpl(
             config = AssistantConfig(root, toolRegistry.getAllSpecs(), systemPromptBuilder.build(null, toolRegistry)),
             provider = llmProvider,
             executeTool = { call -> toolRegistry.findByName(call.name)?.execute(call.input) ?: ToolResult(false, error = "Unknown tool") },
-            history = historyStore, scope = scope, authErrorHandler = authErrorHandler,
+            history = historyStore, scope = scope, authErrorHandler = authErrorHandler, diagnostics = diagnostics,
         ).also { engine ->
             if (engine.state.value.messages.isEmpty()) languagePreferences.getLanguage()?.let { engine.setLanguage(it.code) }
             scope.launch {

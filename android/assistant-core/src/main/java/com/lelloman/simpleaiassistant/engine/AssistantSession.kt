@@ -50,7 +50,9 @@ class AssistantSession private constructor(
     private val history: AssistantHistoryStore,
     parentScope: CoroutineScope,
     private val authErrorHandler: AuthErrorHandler,
+    diagnostics: com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder?,
 ) {
+    private val diagnostics = diagnostics?.let { SessionDiagnostics(it, provider.id) }
     private val job = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + job)
     private val mutex = Mutex()
@@ -68,10 +70,11 @@ class AssistantSession private constructor(
             history: AssistantHistoryStore = MemoryHistoryStore(),
             scope: CoroutineScope,
             authErrorHandler: AuthErrorHandler = AuthErrorHandler.NoOp,
+            diagnostics: com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder? = null,
         ): AssistantSession {
             val archive = history.load().orEmpty()
             val handle = NativeEngine.create(config.toJson().toString(), UUID.randomUUID().toString(), archive)
-            val session = AssistantSession(handle, provider, executeTool, history, scope, authErrorHandler)
+            val session = AssistantSession(handle, provider, executeTool, history, scope, authErrorHandler, diagnostics)
             try { session.apply(buildJsonObject { put("type", "snapshot") }, forceSave = true) }
             catch (e: Exception) { NativeEngine.destroy(handle); session.job.cancel(); throw e }
             return session
@@ -88,6 +91,7 @@ class AssistantSession private constructor(
     suspend fun close() = withContext(NonCancellable) {
         mutex.withLock {
             if (!closed) {
+                diagnostics?.close()
                 requests.values.forEach { it.cancel() }; requests.clear()
                 val output = Json.parseToJsonElement(NativeEngine.dispatch(handle, command("cancel").toString())).jsonObject
                 try { if (storageFailure == null) history.save(output.getValue("state").toString()) }
@@ -111,7 +115,9 @@ class AssistantSession private constructor(
                 mutableState.value = parseState(rawState).copy(activity = "idle", streamingText = "", error = "History could not be saved: ${e.message}")
                 throw e
             }
-            mutableState.value = parseState(rawState)
+            val nextState = parseState(rawState)
+            diagnostics?.record(command, mutableState.value, nextState)
+            mutableState.value = nextState
             effects.filter { it.jsonObject.text("type") != "cancel" }.forEach { element ->
                 val effect = element.jsonObject; val id = effect.text("requestId")
                 val child = scope.launch(start = CoroutineStart.LAZY) { runEffect(effect) }

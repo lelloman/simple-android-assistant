@@ -21,6 +21,8 @@ class AccountChatRepository(
     private val readOwner: () -> String?,
     private val writeOwner: (String?) -> Unit,
     scope: CoroutineScope,
+    private val diagnostics: com.lelloman.simpleaiassistant.diagnostics.DiagnosticRecorder? = null,
+    private val diagnosticsEnabled: () -> Boolean = { false },
 ) : ChatRepository by delegate {
     private val account = MutableStateFlow<String?>(null)
     private val resolved = MutableStateFlow(false)
@@ -61,6 +63,7 @@ class AccountChatRepository(
                 failure.value = null
                 try {
                     transitions.withLock {
+                        diagnostics?.setAccount(current, diagnosticsEnabled())
                         if (current == null || readOwner() != current) {
                             delegate.clearHistory()
                             delegate.setLanguage(null)
@@ -113,6 +116,7 @@ class AccountChatRepository(
         ending.value = true
         readyOwner.value = null
         transitions.withLock {
+            diagnostics?.setAccount(null, false)
             delegate.clearHistory()
             delegate.setLanguage(null)
             writeOwner(null)
