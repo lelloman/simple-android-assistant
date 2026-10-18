@@ -13,6 +13,29 @@ class DiagnosticRecorderTest {
         override fun write(content:String) {this.content=content;writes++}
         override fun clear() {content=null}
     }
+    @Test fun `serialized snapshots and storage include default wire fields`() = runBlocking {
+        val storage=MemoryStorage()
+        val recorder=DiagnosticRecorder(storage)
+        recorder.setAccount("a",true)
+        val empty=Json.parseToJsonElement(storage.content!!).jsonObject["envelope"]!!.jsonObject
+        assertEquals(1,empty["schema_version"]!!.jsonPrimitive.int)
+        assertEquals(0,empty["turns"]!!.jsonArray.size)
+        for(status in listOf("completed","failed","cancelled","running")) {
+            val token=recorder.begin("question")
+            if(status!="running") recorder.finish(token,status)
+        }
+        fun assertEnvelope(content:JsonObject) {
+            assertEquals(1,content["schema_version"]!!.jsonPrimitive.int)
+            assertEquals(listOf("completed","failed","cancelled","running"),
+                content["turns"]!!.jsonArray.map {it.jsonObject["status"]!!.jsonPrimitive.content})
+        }
+        assertEnvelope(Json.parseToJsonElement(recorder.snapshot()!!.content).jsonObject)
+        assertEnvelope(Json.parseToJsonElement(storage.content!!).jsonObject["envelope"]!!.jsonObject)
+        val recovered=DiagnosticRecorder(storage)
+        recovered.setAccount("a",true)
+        val turns=Json.parseToJsonElement(recovered.snapshot()!!.content).jsonObject["turns"]!!.jsonArray
+        assertEquals("interrupted",turns.last().jsonObject["status"]!!.jsonPrimitive.content)
+    }
     @Test fun `bounded Unicode snapshots redact before persistence and reject stale generations`() = runBlocking {
         val storage=MemoryStorage()
         val recorder=DiagnosticRecorder(storage,4096)
@@ -22,6 +45,10 @@ class DiagnosticRecorderTest {
         repeat(12) {recorder.checkpoint(token,"🌍".repeat(4000),it,true)}
         val snapshot=recorder.snapshot()!!
         assertTrue(snapshot.sizeBytes<=4096)
+        val wire=Json.parseToJsonElement(snapshot.content).jsonObject
+        assertEquals(1,wire["schema_version"]!!.jsonPrimitive.int)
+        assertTrue(wire["turns"]!!.jsonArray.isNotEmpty())
+        wire["turns"]!!.jsonArray.forEach {assertEquals("running",it.jsonObject["status"]!!.jsonPrimitive.content)}
         assertTrue(storage.content!!.toByteArray().size<=4096)
         assertFalse(storage.content!!.contains("private-"))
         assertFalse(storage.content!!.contains("secret-value"))

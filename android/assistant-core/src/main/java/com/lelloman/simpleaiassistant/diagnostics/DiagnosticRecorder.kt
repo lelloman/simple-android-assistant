@@ -28,7 +28,11 @@ class DiagnosticSnapshot internal constructor(val content:String,internal val ge
 
 /** Independent, opt-in best-effort recorder. No exception or raw content goes to host logs. */
 class DiagnosticRecorder(private val storage:DiagnosticStorage,private val maxBytes:Int=MAX_BYTES,private val clock:()->Long=System::currentTimeMillis,private val metadata:Map<String,Any?> = emptyMap()) {
-    companion object { const val MAX_BYTES=2_097_152 }
+    companion object {
+        const val MAX_BYTES=2_097_152
+        // Required wire fields (including running status) must survive default values.
+        private val diagnosticJson=Json { encodeDefaults=true }
+    }
     private val mutex=Mutex()
     private var generation=0L
     private val mutableRevision=kotlinx.coroutines.flow.MutableStateFlow(0L)
@@ -60,7 +64,7 @@ class DiagnosticRecorder(private val storage:DiagnosticStorage,private val maxBy
         loaded=true; owner=identity; enabled=recordingEnabled && identity!=null
         envelope=DiagnosticEnvelope(captured_at=timestamp())
         if(initial && enabled) {
-            val stored=storage.read(maxBytes)?.let {Json.decodeFromString<StoredDiagnostics>(it)}
+            val stored=storage.read(maxBytes)?.let {diagnosticJson.decodeFromString<StoredDiagnostics>(it)}
             if(stored!=null && stored.owner==identity && stored.envelope.schema_version==1) {
                 envelope=stored.envelope
                 conversation=envelope.turns.lastOrNull()?.conversation_id ?: conversation
@@ -112,7 +116,7 @@ class DiagnosticRecorder(private val storage:DiagnosticStorage,private val maxBy
         if(!enabled || owner==null || envelope.turns.isEmpty()) return@safe null
         val selected=if(includeAll) envelope.turns else if(messageId!=null) envelope.turns.filter {turn->turn.events.any {event->(event.data as? JsonObject)?.get("message_id")?.jsonPrimitive?.content==messageId}} else envelope.turns.filter {it.conversation_id==envelope.turns.last().conversation_id}
         if(selected.isEmpty()) return@safe null
-        DiagnosticSnapshot(Json.encodeToString(DiagnosticEnvelope(captured_at=timestamp(),turns=selected.toMutableList())),generation)
+        DiagnosticSnapshot(diagnosticJson.encodeToString(DiagnosticEnvelope(captured_at=timestamp(),turns=selected.toMutableList())),generation)
     }
     private fun turn(token:DiagnosticTurnToken?):DiagnosticTurn? = if(!enabled || token==null || token.generation!=generation) null else envelope.turns.find {it.id==token.id && it.status=="running"}
     private fun persist() {
@@ -121,7 +125,7 @@ class DiagnosticRecorder(private val storage:DiagnosticStorage,private val maxBy
         envelope.turns.forEach {turn->
             if(turn.events.size>512) {while(turn.events.size>511) turn.events.removeAt(1);turn.events.add(1,DiagnosticEvent("metadata",timestamp(),DiagnosticRedactor.TRUNCATED))}
         }
-        fun encoded()=Json.encodeToString(StoredDiagnostics(checkNotNull(owner),envelope))
+        fun encoded()=diagnosticJson.encodeToString(StoredDiagnostics(checkNotNull(owner),envelope))
         var text=encoded()
         while(text.toByteArray(Charsets.UTF_8).size>maxBytes) {
             if(envelope.turns.size>1) envelope.turns.removeAt(0)
