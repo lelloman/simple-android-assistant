@@ -25,6 +25,11 @@ obtain separate explicit attachment consent, and check `isCurrent(snapshot)` bef
 upload. Bind the upload to that same server/account. Do not log or background-upload
 snapshots. Local clear does not delete reports already submitted to a server.
 
+Wire snapshots always include `schema_version` and turn `status`. Absent optional
+event `content`, `tool_name` and `data` fields are omitted; explicit nulls inside
+a present data payload are preserved. `fixtures/assistant-diagnostics-v1.json`
+is the shared Pezzottify v1 feedback fixture used to check recovery compatibility.
+
 Storage errors disable collection and invalidate tokens/snapshots, without changing
 chat behavior. If disk deletion itself fails, the host should treat recording as
 unavailable; application-private data may still need OS-level removal. Diagnostic

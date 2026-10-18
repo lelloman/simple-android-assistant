@@ -5,6 +5,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -30,8 +31,9 @@ class DiagnosticSnapshot internal constructor(val content:String,internal val ge
 class DiagnosticRecorder(private val storage:DiagnosticStorage,private val maxBytes:Int=MAX_BYTES,private val clock:()->Long=System::currentTimeMillis,private val metadata:Map<String,Any?> = emptyMap()) {
     companion object {
         const val MAX_BYTES=2_097_152
-        // Required wire fields (including running status) must survive default values.
-        private val diagnosticJson=Json { encodeDefaults=true }
+        // Keep required defaults, but omit absent optional event fields on the wire.
+        @OptIn(ExperimentalSerializationApi::class)
+        private val diagnosticJson=Json { encodeDefaults=true; explicitNulls=false }
     }
     private val mutex=Mutex()
     private var generation=0L

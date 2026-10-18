@@ -4,6 +4,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
+import java.security.MessageDigest
 
 class DiagnosticRecorderTest {
     private class MemoryStorage:DiagnosticStorage {
@@ -35,6 +37,60 @@ class DiagnosticRecorderTest {
         recovered.setAccount("a",true)
         val turns=Json.parseToJsonElement(recovered.snapshot()!!.content).jsonObject["turns"]!!.jsonArray
         assertEquals("interrupted",turns.last().jsonObject["status"]!!.jsonPrimitive.content)
+    }
+    @Test fun `absent optional event fields stay omitted and nested nulls survive`() = runBlocking {
+        val storage=MemoryStorage()
+        val recorder=DiagnosticRecorder(storage,4096)
+        recorder.setAccount("a",true)
+        val token=recorder.begin("question")
+        val payload=buildJsonObject {
+            put("missing",JsonNull)
+            put("nested",buildJsonObject {put("missing",JsonNull)})
+            put("items",buildJsonArray {add(JsonNull)})
+        }
+        recorder.event(token,"tool_result",data=payload)
+        fun assertEvents(envelope:JsonObject) {
+            assertEquals(1,envelope["schema_version"]!!.jsonPrimitive.int)
+            val turn=envelope["turns"]!!.jsonArray.single().jsonObject
+            assertEquals("running",turn["status"]!!.jsonPrimitive.content)
+            val events=turn["events"]!!.jsonArray
+            val user=events.first().jsonObject
+            assertFalse(user.containsKey("tool_name"))
+            assertFalse(user.containsKey("data"))
+            val result=events.last().jsonObject
+            assertFalse(result.containsKey("content"))
+            assertFalse(result.containsKey("tool_name"))
+            assertEquals(payload,result["data"])
+        }
+        assertEvents(Json.parseToJsonElement(recorder.snapshot()!!.content).jsonObject)
+        assertEvents(Json.parseToJsonElement(storage.content!!).jsonObject["envelope"]!!.jsonObject)
+        assertTrue(recorder.snapshot()!!.sizeBytes<=4096)
+        assertTrue(storage.content!!.toByteArray(Charsets.UTF_8).size<=4096)
+        val recovered=DiagnosticRecorder(storage,4096)
+        recovered.setAccount("a",true)
+        val event=Json.parseToJsonElement(recovered.snapshot()!!.content).jsonObject["turns"]!!
+            .jsonArray.single().jsonObject["events"]!!.jsonArray.last().jsonObject
+        assertEquals(payload,event["data"])
+        assertFalse(event.containsKey("content"))
+        assertFalse(event.containsKey("tool_name"))
+    }
+    @Test fun `shared feedback fixture turns survive recovery without added null fields`() = runBlocking {
+        val fixture=File(System.getProperty("assistant.fixtures"),"assistant-diagnostics-v1.json").readText()
+        val expected=Json.parseToJsonElement(fixture).jsonObject
+        val owner=MessageDigest.getInstance("SHA-256").digest("a".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val storage=MemoryStorage()
+        storage.content=buildJsonObject {put("owner",owner);put("envelope",expected)}.toString()
+        val recorder=DiagnosticRecorder(storage,4096)
+        recorder.setAccount("a",true)
+        val snapshot=recorder.snapshot()!!
+        val actual=Json.parseToJsonElement(snapshot.content).jsonObject
+        assertEquals(1,actual["schema_version"]!!.jsonPrimitive.int)
+        assertEquals(expected["turns"],actual["turns"])
+        val persisted=Json.parseToJsonElement(storage.content!!).jsonObject["envelope"]!!.jsonObject
+        assertEquals(expected["turns"],persisted["turns"])
+        assertTrue(snapshot.sizeBytes<=4096)
+        assertTrue(storage.content!!.toByteArray(Charsets.UTF_8).size<=4096)
     }
     @Test fun `bounded Unicode snapshots redact before persistence and reject stale generations`() = runBlocking {
         val storage=MemoryStorage()
